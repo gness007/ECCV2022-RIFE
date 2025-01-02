@@ -110,8 +110,8 @@ except:
 model.eval()
 model.device()
 
-input_video_dir = "/content/arXiv2020-RIFE/videos"
-output_video_dir = "/content/arXiv2020-RIFE/video_output/"
+input_video_dir = "/content/ECCV2022-RIFE/videos"
+output_video_dir = "/content/ECCV2022-RIFE/video_output/"
 video_file_paths = [os.path.join(input_video_dir, f) for f in os.listdir(input_video_dir) if os.path.isfile(os.path.join(input_video_dir, f))]
 
 print(video_file_paths)
