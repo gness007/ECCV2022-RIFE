@@ -68,7 +68,7 @@ parser.add_argument('--png', dest='png', action='store_true', help='whether to v
 parser.add_argument('--ext', dest='ext', type=str, default='mp4', help='vid_out video extension')
 parser.add_argument('--exp', dest='exp', type=int, default=1)
 args = parser.parse_args()
-assert (not args.video is None or not args.img is None)
+#assert (not dvideo is None or not args.img is None)
 if args.skip:
     print("skip flag is abandoned, please refer to issue #207.")
 if args.UHD and args.scale==1.0:
@@ -110,46 +110,11 @@ except:
 model.eval()
 model.device()
 
-if not args.video is None:
-    videoCapture = cv2.VideoCapture(args.video)
-    fps = videoCapture.get(cv2.CAP_PROP_FPS)
-    tot_frame = videoCapture.get(cv2.CAP_PROP_FRAME_COUNT)
-    videoCapture.release()
-    if args.fps is None:
-        fpsNotAssigned = True
-        args.fps = fps * (2 ** args.exp)
-    else:
-        fpsNotAssigned = False
-    videogen = skvideo.io.vreader(args.video)
-    lastframe = next(videogen)
-    fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
-    video_path_wo_ext, ext = os.path.splitext(args.video)
-    print('{}.{}, {} frames in total, {}FPS to {}FPS'.format(video_path_wo_ext, args.ext, tot_frame, fps, args.fps))
-    if args.png == False and fpsNotAssigned == True:
-        print("The audio will be merged after interpolation process")
-    else:
-        print("Will not merge audio because using png or fps flag!")
-else:
-    videogen = []
-    for f in os.listdir(args.img):
-        if 'png' in f:
-            videogen.append(f)
-    tot_frame = len(videogen)
-    videogen.sort(key= lambda x:int(x[:-4]))
-    lastframe = cv2.imread(os.path.join(args.img, videogen[0]), cv2.IMREAD_UNCHANGED)[:, :, ::-1].copy()
-    videogen = videogen[1:]
-h, w, _ = lastframe.shape
-vid_out_name = None
-vid_out = None
-if args.png:
-    if not os.path.exists('vid_out'):
-        os.mkdir('vid_out')
-else:
-    if args.output is not None:
-        vid_out_name = args.output
-    else:
-        vid_out_name = '{}_{}X_{}fps.{}'.format(video_path_wo_ext, (2 ** args.exp), int(np.round(args.fps)), args.ext)
-    vid_out = cv2.VideoWriter(vid_out_name, fourcc, args.fps, (w, h))
+input_video_dir = "/content/arXiv2020-RIFE/videos"
+output_video_dir = "/content/arXiv2020-RIFE/video_output/"
+video_file_paths = [os.path.join(input_video_dir, f) for f in os.listdir(input_video_dir) if os.path.isfile(os.path.join(input_video_dir, f))]
+
+print(video_file_paths)
 
 def clear_write_buffer(user_args, write_buffer):
     cnt = 0
@@ -193,105 +158,151 @@ def pad_image(img):
     else:
         return F.pad(img, padding)
 
-if args.montage:
-    left = w // 4
-    w = w // 2
-tmp = max(32, int(32 / args.scale))
-ph = ((h - 1) // tmp + 1) * tmp
-pw = ((w - 1) // tmp + 1) * tmp
-padding = (0, pw - w, 0, ph - h)
-pbar = tqdm(total=tot_frame)
-if args.montage:
-    lastframe = lastframe[:, left: left + w]
-write_buffer = Queue(maxsize=500)
-read_buffer = Queue(maxsize=500)
-_thread.start_new_thread(build_read_buffer, (args, read_buffer, videogen))
-_thread.start_new_thread(clear_write_buffer, (args, write_buffer))
-
-I1 = torch.from_numpy(np.transpose(lastframe, (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.
-I1 = pad_image(I1)
-temp = None # save lastframe when processing static frame
-
-while True:
-    if temp is not None:
-        frame = temp
-        temp = None
-    else:
-        frame = read_buffer.get()
-    if frame is None:
-        break
-    I0 = I1
-    I1 = torch.from_numpy(np.transpose(frame, (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.
-    I1 = pad_image(I1)
-    I0_small = F.interpolate(I0, (32, 32), mode='bilinear', align_corners=False)
-    I1_small = F.interpolate(I1, (32, 32), mode='bilinear', align_corners=False)
-    ssim = ssim_matlab(I0_small[:, :3], I1_small[:, :3])
-
-    break_flag = False
-    if ssim > 0.996:        
-        frame = read_buffer.get() # read a new frame
-        if frame is None:
-            break_flag = True
-            frame = lastframe
+for dvideo in video_file_paths:
+    #file name only without ext.
+    file_name_without_extension = os.path.splitext(os.path.basename(dvideo))[0]
+    if not dvideo is None:
+        videoCapture = cv2.VideoCapture(dvideo)
+        fps = videoCapture.get(cv2.CAP_PROP_FPS)
+        tot_frame = videoCapture.get(cv2.CAP_PROP_FRAME_COUNT)
+        videoCapture.release()
+        if args.fps is None:
+            fpsNotAssigned = True
+            args.fps = fps * (2 ** args.exp)
         else:
-            temp = frame
+            fpsNotAssigned = False
+        videogen = skvideo.io.vreader(dvideo)
+        lastframe = next(videogen)
+        fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
+        video_path_wo_ext, ext = os.path.splitext(dvideo)
+        print('{}.{}, {} frames in total, {}FPS to {}FPS'.format(video_path_wo_ext, args.ext, tot_frame, fps, args.fps))
+        if args.png == False and fpsNotAssigned == True:
+            print("The audio will be merged after interpolation process")
+        else:
+            print("Will not merge audio because using png or fps flag!")
+    else:
+        videogen = []
+        for f in os.listdir(args.img):
+            if 'png' in f:
+                videogen.append(f)
+        tot_frame = len(videogen)
+        videogen.sort(key= lambda x:int(x[:-4]))
+        lastframe = cv2.imread(os.path.join(args.img, videogen[0]), cv2.IMREAD_UNCHANGED)[:, :, ::-1].copy()
+        videogen = videogen[1:]
+    h, w, _ = lastframe.shape
+    vid_out_name = None
+    vid_out = None
+    if args.png:
+        if not os.path.exists('vid_out'):
+            os.mkdir('vid_out')
+    else:
+        if args.output is not None:
+            vid_out_name = args.output
+        else:
+            vid_path_wo_ext_modified = '{}{}'.format(output_video_dir, file_name_without_extension)
+            vid_out_name = '{}_{}X_{}fps.{}'.format(vid_path_wo_ext_modified, (2 ** args.exp), int(np.round(args.fps)), args.ext)
+            #vid_out_name = '{}_{}X_{}fps.{}'.format(video_path_wo_ext, (2 ** args.exp), int(np.round(args.fps)), args.ext)
+        vid_out = cv2.VideoWriter(vid_out_name, fourcc, args.fps, (w, h))
+
+    if args.montage:
+        left = w // 4
+        w = w // 2
+    tmp = max(32, int(32 / args.scale))
+    ph = ((h - 1) // tmp + 1) * tmp
+    pw = ((w - 1) // tmp + 1) * tmp
+    padding = (0, pw - w, 0, ph - h)
+    pbar = tqdm(total=tot_frame)
+    if args.montage:
+        lastframe = lastframe[:, left: left + w]
+    write_buffer = Queue(maxsize=500)
+    read_buffer = Queue(maxsize=500)
+    _thread.start_new_thread(build_read_buffer, (args, read_buffer, videogen))
+    _thread.start_new_thread(clear_write_buffer, (args, write_buffer))
+
+    I1 = torch.from_numpy(np.transpose(lastframe, (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.
+    I1 = pad_image(I1)
+    temp = None # save lastframe when processing static frame
+
+    while True:
+        if temp is not None:
+            frame = temp
+            temp = None
+        else:
+            frame = read_buffer.get()
+        if frame is None:
+            break
+        I0 = I1
         I1 = torch.from_numpy(np.transpose(frame, (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.
         I1 = pad_image(I1)
-        I1 = model.inference(I0, I1, args.scale)
+        I0_small = F.interpolate(I0, (32, 32), mode='bilinear', align_corners=False)
         I1_small = F.interpolate(I1, (32, 32), mode='bilinear', align_corners=False)
         ssim = ssim_matlab(I0_small[:, :3], I1_small[:, :3])
-        frame = (I1[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
-    
-    if ssim < 0.2:
-        output = []
-        for i in range((2 ** args.exp) - 1):
-            output.append(I0)
-        '''
-        output = []
-        step = 1 / (2 ** args.exp)
-        alpha = 0
-        for i in range((2 ** args.exp) - 1):
-            alpha += step
-            beta = 1-alpha
-            output.append(torch.from_numpy(np.transpose((cv2.addWeighted(frame[:, :, ::-1], alpha, lastframe[:, :, ::-1], beta, 0)[:, :, ::-1].copy()), (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.)
-        '''
-    else:
-        output = make_inference(I0, I1, 2**args.exp-1) if args.exp else []
+
+        break_flag = False
+        if ssim > 0.996:        
+            frame = read_buffer.get() # read a new frame
+            if frame is None:
+                break_flag = True
+                frame = lastframe
+            else:
+                temp = frame
+            I1 = torch.from_numpy(np.transpose(frame, (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.
+            I1 = pad_image(I1)
+            I1 = model.inference(I0, I1, args.scale)
+            I1_small = F.interpolate(I1, (32, 32), mode='bilinear', align_corners=False)
+            ssim = ssim_matlab(I0_small[:, :3], I1_small[:, :3])
+            frame = (I1[0] * 255).byte().cpu().numpy().transpose(1, 2, 0)[:h, :w]
+        
+        if ssim < 0.2:
+            output = []
+            for i in range((2 ** args.exp) - 1):
+                output.append(I0)
+            '''
+            output = []
+            step = 1 / (2 ** args.exp)
+            alpha = 0
+            for i in range((2 ** args.exp) - 1):
+                alpha += step
+                beta = 1-alpha
+                output.append(torch.from_numpy(np.transpose((cv2.addWeighted(frame[:, :, ::-1], alpha, lastframe[:, :, ::-1], beta, 0)[:, :, ::-1].copy()), (2,0,1))).to(device, non_blocking=True).unsqueeze(0).float() / 255.)
+            '''
+        else:
+            output = make_inference(I0, I1, 2**args.exp-1) if args.exp else []
+
+        if args.montage:
+            write_buffer.put(np.concatenate((lastframe, lastframe), 1))
+            for mid in output:
+                mid = (((mid[0] * 255.).byte().cpu().numpy().transpose(1, 2, 0)))
+                write_buffer.put(np.concatenate((lastframe, mid[:h, :w]), 1))
+        else:
+            write_buffer.put(lastframe)
+            for mid in output:
+                mid = (((mid[0] * 255.).byte().cpu().numpy().transpose(1, 2, 0)))
+                write_buffer.put(mid[:h, :w])
+        pbar.update(1)
+        lastframe = frame
+        if break_flag:
+            break
 
     if args.montage:
         write_buffer.put(np.concatenate((lastframe, lastframe), 1))
-        for mid in output:
-            mid = (((mid[0] * 255.).byte().cpu().numpy().transpose(1, 2, 0)))
-            write_buffer.put(np.concatenate((lastframe, mid[:h, :w]), 1))
     else:
         write_buffer.put(lastframe)
-        for mid in output:
-            mid = (((mid[0] * 255.).byte().cpu().numpy().transpose(1, 2, 0)))
-            write_buffer.put(mid[:h, :w])
-    pbar.update(1)
-    lastframe = frame
-    if break_flag:
-        break
 
-if args.montage:
-    write_buffer.put(np.concatenate((lastframe, lastframe), 1))
-else:
-    write_buffer.put(lastframe)
+    write_buffer.put(None)
 
-write_buffer.put(None)
+    import time
+    while(not write_buffer.empty()):
+        time.sleep(0.1)
+    pbar.close()
+    if not vid_out is None:
+        vid_out.release()
 
-import time
-while(not write_buffer.empty()):
-    time.sleep(0.1)
-pbar.close()
-if not vid_out is None:
-    vid_out.release()
-
-# move audio to new video file if appropriate
-if args.png == False and fpsNotAssigned == True and not args.video is None:
-    try:
-        transferAudio(args.video, vid_out_name)
-    except:
-        print("Audio transfer failed. Interpolated video will have no audio")
-        targetNoAudio = os.path.splitext(vid_out_name)[0] + "_noaudio" + os.path.splitext(vid_out_name)[1]
-        os.rename(targetNoAudio, vid_out_name)
+    # move audio to new video file if appropriate
+    if args.png == False and fpsNotAssigned == True and not dvideo is None:
+        try:
+            transferAudio(dvideo, vid_out_name)
+        except:
+            print("Audio transfer failed. Interpolated video will have no audio")
+            targetNoAudio = os.path.splitext(vid_out_name)[0] + "_noaudio" + os.path.splitext(vid_out_name)[1]
+            os.rename(targetNoAudio, vid_out_name)
